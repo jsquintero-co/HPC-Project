@@ -1,4 +1,4 @@
-# HPC Cluster Technical Specification Report
+# HPC Cluster Technical Specification 
 
 **Project:** High-Performance & Distributed Computing Infrastructure
 
