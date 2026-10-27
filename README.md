@@ -1,153 +1,80 @@
-# High-Performance Computing (HPC) Cluster Documentation
+# HPC Cluster Technical Specification Report
 
-## 1. Overview
-This document outlines the architecture, hardware setup, network configuration, parallel processing stack, remote access setup, and monitoring infrastructure for a two-node heterogeneous High-Performance Computing (HPC) cluster.
+**Project:** High-Performance & Distributed Computing Infrastructure
 
-The cluster operates on a distributed computing framework utilizing OpenMPI over a secure, private network layer, allowing synchronized workload execution across both nodes.
+**Workload Manager:** Slurm Workload Manager
 
----
+**Cluster Architecture:** Heterogeneous (CPU/GPU-Enabled Master Node)
 
-## 2. Hardware Specifications
+**Status:** Operational
 
-| Node Role | Identifier | CPU | Cores / Threads | Clock Speed | RAM | Storage | GPU | Operating System |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Master Node (Tower)** | `hpc1` | Intel Core i5-10400F | 6C / 12T | Up to 4.30 GHz | 24 GB DDR4 | 700 GB | NVIDIA GTX 1050 Ti | Ubuntu Server |
-| **Worker Node (ThinkPad)** | `hpc2` | Intel Core i5-6200U | 2C / 4T | Up to 2.80 GHz | 16 GB DDR4 | 500 GB | Integrated Graphics | Ubuntu Server |
+## 1. System Architecture & Network Topology
 
----
+* **Orchestration & Scheduling:** Slurm Workload Manager (`slurmctld` on `hpc1`, `slurmd` on `hpc1` and `hpc2`).
 
-## 3. Network & System Configuration
+* **Distributed File System:** Centralized NFS (*Network File System*) mount point for synchronized access to scripts, binaries, and datasets across all nodes.
 
-### 3.1 Network Topology & Static IPs
-Both nodes are connected via local Ethernet with static local IP addresses established to ensure reliable inter-node communication.
+* **Inter-Node Authentication:** MUNGE (*MUNGE Uid N' Gid Emporium*) for secure credential signing and verification.
 
-* **Master Node (`hpc1`):** `192.168.40.213`
-* **Worker Node (`hpc2`):** `192.168.40.83`
+* **Networking:** Dedicated Ethernet Local Area Network (LAN) with open Slurm control ports (`6817/TCP`) and task execution ports (`6818/TCP`) for bidirectional communication.
 
-### 3.2 Passwordless SSH Connectivity
-To facilitate automated cluster orchestration via `mpirun`, passwordless SSH was established between nodes using RSA/ED25519 key pairs.
+## 2. Hardware Specifications per Node
 
-1. Key generation on primary node:
-   ```bash
-   ssh-keygen -t ed25519 -C "hpc-cluster-key"
-   ```
-2. Distributing public key to worker node:
-   ```bash
-   ssh-copy-id palmer@192.168.40.83
-   ```
-3. Verification of seamless passwordless entry:
-   ```bash
-   ssh palmer@192.168.40.83
-   ```
+### Master / Compute Node (`hpc1`)
 
----
+* **Role:** Controller & Worker Node (`slurmctld` / `slurmd`)
 
-## 4. Software Environment & Parallel Stack
+* **Processor (CPU):** Intel Core i5-10400F @ 4.30 GHz Max Turbo (6 Cores / 12 Threads)
 
-### 4.1 Dependency Management (PEP 668 Handling)
-Modern Ubuntu systems enforce **PEP 668** (`externally-managed-environment`), blocking global system-wide `pip` installs to protect system stability. 
+* **System Memory (RAM):** 24 GB DDR4
 
-To manage Python-based system utilities safely without interfering with core OS packages, **`pipx`** was installed:
-```bash
-sudo apt update && sudo apt install -y pipx
-pipx ensurepath
-source ~/.bashrc
-```
+* **Graphics Acceleration (GPU):** NVIDIA GeForce GTX 1050 Ti (4 GB VRAM)
 
-### 4.2 Distributed Parallel Processing (`OpenMPI` & `mpi4py`)
-The parallel processing layer relies on OpenMPI for low-level C execution and `mpi4py` for Python parallelization.
+* **Storage:** 700 GB SSD (Host for NFS mount point)
 
-1. Installed OpenMPI compilers and development headers on both nodes:
-   ```bash
-   sudo apt install -y openmpi-bin libopenmpi-dev build-essential
-   ```
-2. Python parallelization binding (`mpi4py`):
-   ```bash
-   sudo apt install -y python3-mpi4py
-   ```
+* **Operating System:** Ubuntu Linux
 
-### 4.3 Validation Code Example (High-Load C Benchmark)
-The cluster was validated by distributing a massive 50-billion iteration numerical integration (Riemann Sum) calculation for Pi using C with MPI headers:
+### Worker Node (`hpc2`)
 
-* **Source File:** `pi_pesado.c`
-* **Compilation Command:**
-  ```bash
-  mpicc -O3 -o pi_pesado pi_pesado.c
-  ```
-* **Distributed Execution Command:**
-  ```bash
-  mpirun -H 192.168.40.213,192.168.40.83 -n 2 ./pi_pesado
-  ```
+* **Role:** Dedicated Worker Node (`slurmd`)
 
----
+* **Processor (CPU):** Intel Core i5-6200U @ 2.80 GHz Max Turbo (2 Cores / 4 Threads)
 
-## 5. Monitoring Infrastructure
+* **System Memory (RAM):** 16 GB DDR4
 
-### 5.1 CLI Monitoring (Glances)
-Installed via `pipx` on both nodes for terminal-based performance inspection:
-```bash
-pipx install glances
-```
-* **Local Mode:** `glances`
-* **Server Mode (Slave):** `glances -s`
-* **Client Mode (Master):** `glances -c 192.168.40.83`
+* **Graphics Acceleration (GPU):** N/A
 
-### 5.2 Real-Time Web Monitoring (Netdata)
-Deployed Netdata across both nodes to visualize real-time CPU, RAM, disk, and network throughput via a centralized web dashboard:
+* **Storage:** 500 GB (NFS client mounted at `/hpc_share`)
 
-* **Installation Command (run on both `hpc1` and `hpc2`):**
-  ```bash
-  wget -O /tmp/netdata-kickstart.sh https://my-netdata.io/kickstart.sh && sh /tmp/netdata-kickstart.sh --non-interactive
-  ```
-* **Dashboard URLs:**
-  * Master Node: `http://192.168.40.213:19999`
-  * Worker Node: `http://192.168.40.83:19999`
+* **Operating System:** Ubuntu Linux
 
----
+## 3. Global Cluster Resource Summary
 
-## 6. Remote Management & Secure Access (Tailscale)
+| Parameter | Total Cluster Capacity | 
+| ----- | ----- | 
+| **Total Nodes** | 2 Compute Nodes (`hpc1`, `hpc2`) | 
+| **Total Logical Threads (vCPU)** | 16 Processing Threads | 
+| **Total RAM** | 40 GB DDR4 | 
+| **Total Storage** | 1.2 TB (700 GB Host / 500 GB Worker) | 
+| **Hardware Acceleration** | 1x NVIDIA GTX 1050 Ti (Locally available on `hpc1`) | 
+| **Execution Mode** | Asynchronous / Batch (`sbatch`) and Parallel execution (`srun`) | 
 
-To manage and execute workloads on the HPC cluster from external networks (outside the local home network) without exposing vulnerable ports to the public internet, **Tailscale** (WireGuard mesh VPN) was deployed.
+## 4. Workload Profile & Software Compatibility
 
-### 6.1 Cluster Nodes Setup (Linux)
-1. Installed Tailscale on `hpc1` and `hpc2`:
-   ```bash
-   curl -fsSL https://tailscale.com/install.sh | sh
-   ```
-2. Authenticated both nodes to the private network mesh:
-   ```bash
-   sudo tailscale up
-   ```
+### Prototyping and Execution Capabilities
 
-### 6.2 Client Workstation Setup (Windows)
-1. Downloaded and installed Tailscale Windows client.
-2. Authenticated with the same user account.
+* **CPU Distributed Computing:** Optimized for compute-intensive workloads, stochastic simulations (Monte Carlo), parallel C/C++ applications, and multi-process distributed scripts (16 combined threads).
 
-### 6.3 Secure Connection Workflow
-With Tailscale active on external clients, secure SSH and Web UI access are achievable via Tailscale IP addresses (`100.x.x.x` range) from anywhere in the world:
-```powershell
-ssh palmer@100.x.x.x
-```
+* **Classic Machine Learning (Multi-Node CPU):** Configured for CPU-based parallel workloads (Scikit-Learn, XGBoost, Random Forest, parallel cross-validation, and hyperparameter grid search leveraging 40 GB combined RAM).
 
----
+* **GPU Acceleration (Single-Node / `hpc1`):** Supported for local prototyping and light Deep Learning training via CUDA/PyTorch/TensorFlow on `hpc1`.
 
-## 7. Standard Operating Procedures (SOP)
+* **Data Processing:** Compatible with in-memory distributed datasets via NFS (Pandas, Dask, Python multiprocessing).
 
-### 7.1 Power Down Procedure
-To prevent file system corruption or stale network locks:
-1. Shutdown Worker Node (`hpc2`):
-   ```bash
-   ssh palmer@192.168.40.83 "sudo shutdown now"
-   ```
-2. Shutdown Master Node (`hpc1`):
-   ```bash
-   sudo shutdown now
-   ```
+### Available Environment & Tooling
 
-### 7.2 Power Up & Verification Procedure
-1. Boot both physical machines (`hpc1` and `hpc2`).
-2. Test network handshake from Master:
-   ```bash
-   ping -c 3 192.168.40.83
-   ```
-3. Netdata and Tailscale services start automatically upon system boot up.
+* **Compilers:** GCC / G++ with advanced optimization support (`-O3`).
+
+* **Runtimes & Libraries:** Python 3.x, Bash Shell, NVIDIA CUDA Drivers (on `hpc1`).
+
+* **Workflow Automation:** Full support for asynchronous batch processing via `#SBATCH` directives and standardized logging outputs.
